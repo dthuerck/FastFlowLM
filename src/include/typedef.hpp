@@ -110,6 +110,35 @@ inline __m128i f32o_bf16(__m256 fp32_vals) {
                             _mm256_extracti128_si256(rounded, 1));
 }
 
+/// \brief FLM_AVX512_ABI_OK reads 1 where this translation unit may pass an
+///        __m512 over a function boundary, 0 where it may not.
+///        FLM_POISON_WITHOUT_AVX512(decl, why) declares decl so that calling
+///        it fails to compile, and expands to nothing where the ABI is fine.
+/// \note GCC and Clang pick the convention for a 512-bit vector from the ISA
+///       enabled where the call appears, not from where the function is
+///       defined. With AVX-512 on, the value travels in %zmm0; with it off,
+///       the caller passes a hidden pointer and reads the result back from
+///       memory. Both shapes mangle to the same name, so a caller built
+///       without AVX-512 links against the AVX-512 copy and reads garbage
+///       rather than failing to link. A poisoned declaration puts a
+///       diagnostic where the wrong answer used to be.
+/// \note MSVC is exempt: its ABI places an MCD vector by its size whatever
+///       /arch says, so a caller there cannot get the convention wrong.
+/// \note Callers name the ISA on their own file, as the AVX-512 sources and
+///       the gemma4e_npu target do in CMakeLists.txt. The AVX2 helpers above
+///       carry 8 lanes and need no such flag.
+/// \note imageprocAVX512.hpp and utils/avx512_util.hpp guard theirs with these
+///       two macros. Nothing else should pass an __m512 across a boundary.
+#if defined(__GNUC__) && !defined(__AVX512F__)
+#define FLM_AVX512_ABI_OK 0
+#define FLM_POISON_WITHOUT_AVX512(decl, why) \
+    __attribute__((error("__m512 passed by value: compile this file with AVX-512 enabled (-mavx512f, or /arch:AVX512); " why))) decl;
+#else
+#define FLM_AVX512_ABI_OK 1
+#define FLM_POISON_WITHOUT_AVX512(decl, why)
+#endif
+
+#if FLM_AVX512_ABI_OK
 /// \brief AVX-512 Convert bfloat16 to float32 (16 lanes)
 /// \param bf16_vals the bfloat16 values, 256-bits, 16xbf16
 /// \return the float32 values, 512-bits, 16xfloat32
@@ -136,6 +165,10 @@ inline __m256i f32o_bf16_512(__m512 fp32_vals) {
     result = _mm256_inserti128_si256(result, upper_bf16, 1);
     return result;
 }
+#else
+FLM_POISON_WITHOUT_AVX512(__m512 bf16o_fp32_512(__m256i bf16_vals), "the AVX2 bf16o_fp32 works from any file")
+FLM_POISON_WITHOUT_AVX512(__m256i f32o_bf16_512(__m512 fp32_vals), "the AVX2 f32o_bf16 works from any file")
+#endif
 
 /// \brief Convert UTF-8 string to wide string
 /// \param str the UTF-8 string

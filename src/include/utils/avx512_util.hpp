@@ -6,6 +6,12 @@
 #include <cstdint>
 
 
+// Every helper in this block passes an __m512 over a function boundary, so it
+// is built only where that is safe -- see FLM_AVX512_ABI_OK in typedef.hpp.
+// The pointer-only conversions at the end of the file keep their plain
+// signatures and stay available either way.
+#if FLM_AVX512_ABI_OK
+
 /**
  * @brief Helper function to load 16 bfloat16 values and convert to __m512 (float).
  */
@@ -228,6 +234,15 @@ inline __m512 gaussian_avx512(__m512 x, __m512 sigma) {
     // Return 1.0 if sigma <= 0, otherwise exp result
     return _mm512_mask_blend_ps(mask_zero_sigma, exp_result, one);
 }
+#else
+FLM_POISON_WITHOUT_AVX512(__m512 load_bfloat16_to_m512(const bf16* ptr), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(void store_m512_to_bfloat16(bf16* ptr, __m512 data), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(void store_m512_to_bfloat16_rne(bf16* ptr, __m512 data), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(__m512 _mm512_exp_ps_corrected(__m512 x), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(__m512 _mm512_log_ps_approx(__m512 x), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(__m512 gelu_tanh_avx512_simd(__m512 gate_vec_fp32), "move the caller into a source that names the ISA, as the engine sources do")
+FLM_POISON_WITHOUT_AVX512(__m512 gaussian_avx512(__m512 x, __m512 sigma), "move the caller into a source that names the ISA, as the engine sources do")
+#endif
 
 // Fast conversion from uint8 to float with normalization
 inline void convert_uint8_to_float_avx512(const uint8_t* src, float* dst, size_t count) {

@@ -30,6 +30,12 @@ namespace avx512 {
 
 
 
+    // The two helpers below hand an __m512 over a function boundary, so they
+    // are built only where that is safe -- see FLM_AVX512_ABI_OK in
+    // typedef.hpp. has_avx512f() above stays available everywhere: it is the
+    // runtime check a dispatcher makes before choosing a path, and it needs
+    // no AVX-512 of its own.
+#if FLM_AVX512_ABI_OK
     // Fast, corrected AVX-512 exp approximation (single-precision).
     // Notes:
     //  - Input x is clamped to [-88, 88] to avoid overflow/underflow.
@@ -123,6 +129,12 @@ namespace avx512 {
         // Return 1.0 if sigma <= 0, otherwise exp result
         return _mm512_mask_blend_ps(mask_zero_sigma, exp_result, one);
     }
+#else
+    // The plain-typed entry points at the end of this header are defined in
+    // imageprocAVX512.cpp, which names the ISA, and stay callable from here.
+    FLM_POISON_WITHOUT_AVX512(__m512 _mm512_exp_ps_corrected(__m512 x), "use the plain-typed entry points this header still declares")
+    FLM_POISON_WITHOUT_AVX512(__m512 gaussian_avx512(__m512 x, __m512 sigma), "use the plain-typed entry points this header still declares")
+#endif
 
     // Fast conversion from uint8 to float with normalization
     inline void convert_uint8_to_float_avx512(const uint8_t* src, float* dst, size_t count) {
@@ -183,6 +195,7 @@ namespace avx512 {
 
 
 
+#if FLM_AVX512_ABI_OK
     // Vectorized bicubic kernel computation for 16 floats
     inline __m512 bicubic_kernel_avx512(__m512 x) {
         const __m512 a = _mm512_set1_ps(-0.5f);
@@ -226,6 +239,9 @@ namespace avx512 {
 
         return result;
     }
+#else
+    FLM_POISON_WITHOUT_AVX512(__m512 bicubic_kernel_avx512(__m512 x), "resize goes through imageprocAVX512.cpp, which names the ISA")
+#endif
 
 
     // AVX-512 optimized bicubic resize for a single plane
